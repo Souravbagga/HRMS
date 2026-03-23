@@ -1,0 +1,174 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import Link from "next/link";
+import { ShieldCheck, Mail, Lock, User } from "lucide-react";
+import { createClient } from "@/lib/supabaseClient";
+
+export default function RegisterPage() {
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      setLoading(false);
+      return;
+    }
+
+    const supabase = createClient();
+    const { error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name, role: "employee" },
+      },
+    });
+
+    if (signUpError) {
+      setError(signUpError.message);
+      setLoading(false);
+      return;
+    }
+
+    setSuccess(true);
+    setLoading(false);
+    // Redirect to login after short delay
+    setTimeout(() => router.push("/login"), 2000);
+  }
+
+  return (
+    <div className="relative min-h-screen flex items-center justify-center bg-background overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-50 dark:opacity-20">
+        <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-500/10 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/10 rounded-full blur-[120px]" />
+      </div>
+
+      <div className="w-full max-w-md px-6 relative z-10">
+        <div className="flex flex-col items-center mb-10">
+          <div className="bg-indigo-500 rounded-2xl p-3 shadow-xl shadow-indigo-500/20 mb-4">
+            <ShieldCheck className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-3xl font-black tracking-tighter text-foreground mb-1">HRMS.pro</h1>
+          <p className="text-muted-foreground text-sm font-medium">Create your employee account</p>
+        </div>
+
+        <Card className="rounded-[2.5rem] border-border/40 shadow-2xl shadow-indigo-500/10 bg-card/80 backdrop-blur-xl p-2 sm:p-4 border-2">
+          <CardHeader className="space-y-2 text-center pt-8">
+            <CardTitle className="text-2xl font-black tracking-tight">Create Account</CardTitle>
+            <CardDescription className="text-muted-foreground font-medium text-sm">
+              Register as an employee to get started.
+            </CardDescription>
+          </CardHeader>
+
+          <form onSubmit={handleRegister}>
+            <CardContent className="grid gap-5 pt-4">
+              {error && (
+                <div className="text-sm font-semibold text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-xl px-4 py-3 text-center">
+                  {error}
+                </div>
+              )}
+              {success && (
+                <div className="text-sm font-semibold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 text-center">
+                  Account created! Check your email to confirm, then log in.
+                </div>
+              )}
+
+              <div className="grid gap-2">
+                <Label htmlFor="name" className="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">
+                  Full Name
+                </Label>
+                <div className="relative">
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                  <Input
+                    id="name"
+                    type="text"
+                    placeholder="John Doe"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    className="h-14 pl-12 rounded-2xl bg-muted/20 border-border/40 focus-visible:ring-indigo-500/20 focus-visible:border-indigo-500/50 font-bold transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="email" className="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">
+                  Email Address
+                </Label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@company.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className="h-14 pl-12 rounded-2xl bg-muted/20 border-border/40 focus-visible:ring-indigo-500/20 focus-visible:border-indigo-500/50 font-bold transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="password" className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                  Password
+                </Label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Min. 6 characters"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="h-14 pl-12 rounded-2xl bg-muted/20 border-border/40 focus-visible:ring-indigo-500/20 focus-visible:border-indigo-500/50 font-bold transition-all text-xl"
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                disabled={loading || success}
+                className="h-14 rounded-2xl text-lg font-black shadow-lg shadow-indigo-500/20 bg-indigo-500 hover:bg-indigo-600 transition-all hover:translate-y-[-2px] active:scale-[0.98] disabled:opacity-60"
+              >
+                {loading ? "Creating Account..." : "Create Account"}
+              </Button>
+            </CardContent>
+          </form>
+
+          <CardFooter className="flex flex-col gap-4 pb-10 pt-2">
+            <p className="text-sm text-center text-muted-foreground">
+              Already have an account?{" "}
+              <Link href="/login" className="font-bold text-indigo-500 hover:underline">
+                Sign in
+              </Link>
+            </p>
+          </CardFooter>
+        </Card>
+      </div>
+    </div>
+  );
+}
