@@ -10,7 +10,8 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "HRMS - Premium Human Resource Management System",
-  description: "A modern, production-quality dashboard for workforce management.",
+  description:
+    "A modern, production-quality dashboard for workforce management.",
 };
 
 export default function RootLayout({

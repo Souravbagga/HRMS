@@ -55,6 +55,34 @@ export interface DashboardStats {
   pendingRequests: number
 }
 
+export interface LeaveBalance {
+  id: string
+  employee_id: string
+  annual_total: number
+  annual_used: number
+  sick_total: number
+  sick_used: number
+  casual_total: number
+  casual_used: number
+  earned_total: number
+  earned_used: number
+  maternity_total: number
+  maternity_used: number
+  paternity_total: number
+  paternity_used: number
+  created_at: string
+  updated_at: string
+}
+
+export const DEFAULT_LEAVE_BALANCES = {
+  annual_total: 12,
+  sick_total: 6,
+  casual_total: 4,
+  earned_total: 0,
+  maternity_total: 90,
+  paternity_total: 7,
+}
+
 export type NotificationType = 'clock_in' | 'clock_out' | 'leave_applied' | 'leave_approved' | 'leave_rejected' | 'employee_added'
 
 export interface Notification {

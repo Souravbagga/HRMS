@@ -2,7 +2,15 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Bell, Clock, CalendarDays, UserPlus, Check, CheckCheck, Loader2 } from "lucide-react";
+import {
+  Bell,
+  Clock,
+  CalendarDays,
+  UserPlus,
+  Check,
+  CheckCheck,
+  Loader2,
+} from "lucide-react";
 import { createClient } from "@/lib/supabaseClient";
 import { useUserStore } from "@/store/userStore";
 import { cn } from "@/lib/utils";
@@ -48,7 +56,8 @@ export function NotificationBell() {
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -90,7 +99,7 @@ export function NotificationBell() {
     const supabase = createClient();
     await supabase.from("notifications").update({ read: true }).eq("id", id);
     setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
     );
   }
 
@@ -117,7 +126,9 @@ export function NotificationBell() {
         <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 rounded-2xl border border-border/60 bg-popover shadow-xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 overflow-hidden">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
-            <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
+            <h3 className="text-sm font-semibold text-foreground">
+              Notifications
+            </h3>
             {unreadCount > 0 && (
               <button
                 onClick={markAllRead}
@@ -150,23 +161,39 @@ export function NotificationBell() {
                     onClick={() => !notif.read && markOneRead(notif.id)}
                     className={cn(
                       "w-full flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 border-b border-border/20 last:border-b-0",
-                      !notif.read && "bg-muted/30"
+                      !notif.read && "bg-muted/30",
                     )}
                   >
-                    <div className={cn("p-2 rounded-lg shrink-0 mt-0.5", colorMap[notif.type])}>
+                    <div
+                      className={cn(
+                        "p-2 rounded-lg shrink-0 mt-0.5",
+                        colorMap[notif.type],
+                      )}
+                    >
                       <Icon className="w-3.5 h-3.5" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className={cn("text-sm leading-tight", !notif.read ? "font-semibold text-foreground" : "text-foreground/80")}>
+                        <p
+                          className={cn(
+                            "text-sm leading-tight",
+                            !notif.read
+                              ? "font-semibold text-foreground"
+                              : "text-foreground/80",
+                          )}
+                        >
                           {notif.title}
                         </p>
                         {!notif.read && (
                           <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{notif.message}</p>
-                      <p className="text-[11px] text-muted-foreground/60 mt-1">{timeAgo(notif.created_at)}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                        {notif.message}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground/60 mt-1">
+                        {timeAgo(notif.created_at)}
+                      </p>
                     </div>
                   </button>
                 );

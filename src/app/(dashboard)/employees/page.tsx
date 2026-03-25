@@ -148,7 +148,7 @@ export default function EmployeesPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem className="rounded-lg gap-2 text-primary focus:text-primary">
                             <Edit2 className="w-4 h-4" />
-                            <span>Edit Profile</span>
+                            <Link href={`/employees/${employee.id}/edit`} className="w-full">Edit Profile</Link>
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

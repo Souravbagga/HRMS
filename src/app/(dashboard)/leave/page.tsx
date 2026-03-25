@@ -41,10 +41,88 @@ export default function LeavePage() {
   async function updateStatus(id: string, status: "approved" | "rejected") {
     setActionLoading(id);
     const supabase = createClient();
+    const leave = leaves.find((l) => l.id === id);
+
+    // If approving, check and update leave balance
+    if (leave && status === "approved" && leave.leave_type !== "Unpaid") {
+      const days = Math.ceil(
+        (new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 60 * 60 * 24)
+      ) + 1;
+
+      // Find the employee record to get employee_id
+      const { data: emp } = await supabase
+        .from("employees")
+        .select("id")
+        .eq("profile_id", leave.user_id)
+        .single();
+
+      if (emp) {
+        const typeKey = leave.leave_type.toLowerCase() as string;
+        const usedCol = `${typeKey}_used`;
+        const totalCol = `${typeKey}_total`;
+
+        // Get current balance
+        const { data: balance } = await supabase
+          .from("leave_balances")
+          .select("*")
+          .eq("employee_id", emp.id)
+          .single();
+
+        if (balance) {
+          const currentUsed = (balance as Record<string, number>)[usedCol] ?? 0;
+          const total = (balance as Record<string, number>)[totalCol] ?? 0;
+          const remaining = total - currentUsed;
+
+          if (days > remaining) {
+            setActionLoading(null);
+            alert(`Cannot approve: Employee only has ${remaining} ${leave.leave_type} leave days remaining (requested ${days}).`);
+            return;
+          }
+
+          // Deduct balance
+          await supabase
+            .from("leave_balances")
+            .update({ [usedCol]: currentUsed + days })
+            .eq("employee_id", emp.id);
+        }
+      }
+    }
+
+    // If rejecting a previously approved leave, restore balance
+    if (leave && status === "rejected" && leave.status === "approved" && leave.leave_type !== "Unpaid") {
+      const days = Math.ceil(
+        (new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 60 * 60 * 24)
+      ) + 1;
+
+      const { data: emp } = await supabase
+        .from("employees")
+        .select("id")
+        .eq("profile_id", leave.user_id)
+        .single();
+
+      if (emp) {
+        const typeKey = leave.leave_type.toLowerCase() as string;
+        const usedCol = `${typeKey}_used`;
+
+        const { data: balance } = await supabase
+          .from("leave_balances")
+          .select("*")
+          .eq("employee_id", emp.id)
+          .single();
+
+        if (balance) {
+          const currentUsed = (balance as Record<string, number>)[usedCol] ?? 0;
+          await supabase
+            .from("leave_balances")
+            .update({ [usedCol]: Math.max(0, currentUsed - days) })
+            .eq("employee_id", emp.id);
+        }
+      }
+    }
+
     await supabase.from("leaves").update({ status }).eq("id", id);
 
     // Notify the employee about their leave status
-    const leave = leaves.find((l) => l.id === id);
     if (leave) {
       createNotification({
         userId: leave.user_id,

@@ -31,11 +31,14 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { email, name } = body;
+  const { email, name, role = "employee" } = body;
 
   if (!email || !name) {
     return NextResponse.json({ error: "Email and name are required" }, { status: 400 });
   }
+
+  // Validate role
+  const validRole = role === "admin" ? "admin" : "employee";
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
   // Must be a clean URL — Supabase appends token_hash & type as query params
@@ -45,7 +48,7 @@ export async function POST(req: NextRequest) {
 
   const adminClient = createAdminClient();
   const { data, error } = await adminClient.auth.admin.inviteUserByEmail(email, {
-    data: { name, role: "employee" },
+    data: { name, role: validRole },
     redirectTo,
   });
 

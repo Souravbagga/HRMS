@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { buttonVariants, Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -14,12 +13,12 @@ import {
 import Link from "next/link";
 import {
   ArrowLeft, Mail, Briefcase, Calendar, Clock, Shield, Award,
-  FileText, Loader2, AlertCircle,
+  Loader2, AlertCircle, TrendingUp, CalendarDays, Timer,
 } from "lucide-react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabaseClient";
 import { cn } from "@/lib/utils";
-import type { Employee, Attendance, Leave } from "@/types";
+import type { Employee, Attendance, Leave, LeaveBalance } from "@/types";
 
 export default function EmployeeProfilePage() {
   const params = useParams();
@@ -28,6 +27,7 @@ export default function EmployeeProfilePage() {
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [leaves, setLeaves] = useState<Leave[]>([]);
+  const [balance, setBalance] = useState<LeaveBalance | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -44,7 +44,14 @@ export default function EmployeeProfilePage() {
       if (!emp) { setNotFound(true); setLoading(false); return; }
       setEmployee(emp as Employee);
 
-      // If employee has a profile_id, fetch their attendance and leaves
+      // Fetch leave balance
+      const { data: bal } = await supabase
+        .from("leave_balances")
+        .select("*")
+        .eq("employee_id", id)
+        .single();
+      setBalance(bal as LeaveBalance | null);
+
       if (emp.profile_id) {
         const [{ data: att }, { data: lvs }] = await Promise.all([
           supabase
@@ -94,36 +101,92 @@ export default function EmployeeProfilePage() {
   const annualLeaves = approvedLeaves.filter((l) => l.leave_type === "Annual").length;
   const sickLeaves = approvedLeaves.filter((l) => l.leave_type === "Sick").length;
   const otherLeaves = approvedLeaves.filter((l) => !["Annual", "Sick"].includes(l.leave_type)).length;
+  const pendingLeaves = leaves.filter((l) => l.status === "pending").length;
+
+  // Calculate average hours
+  const totalHours = attendance.reduce((sum, a) => sum + (a.total_hours ?? 0), 0);
+  const avgHours = attendance.length > 0 ? (totalHours / attendance.length).toFixed(1) : "0";
+  const presentDays = attendance.filter((a) => a.status === "Present").length;
+  const lateDays = attendance.filter((a) => a.status === "Late").length;
 
   return (
-    <div className="flex flex-col gap-8 max-w-6xl mx-auto w-full pb-20">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/employees"
-            className={buttonVariants({ variant: "ghost", size: "icon", className: "rounded-xl border border-border/40 bg-card hover:bg-muted" })}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Employee Profile</h1>
-            <p className="text-muted-foreground mt-1">
-              Viewing records for <span className="font-bold text-foreground">{employee.name}</span>
-            </p>
-          </div>
+    <div className="flex flex-col gap-6 w-full pb-10">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Link
+          href="/employees"
+          className={buttonVariants({ variant: "ghost", size: "icon", className: "rounded-xl border border-border/40 bg-card hover:bg-muted" })}
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Link>
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Employee Profile</h1>
+          <p className="text-muted-foreground mt-1">
+            Viewing records for <span className="font-bold text-foreground">{employee.name}</span>
+          </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left column */}
-        <div className="lg:col-span-4 flex flex-col gap-6">
-          <Card className="rounded-2xl border border-border/60 shadow-sm">
-            <CardContent className="p-8 flex flex-col items-center text-center">
-              <div className="w-24 h-24 rounded-2xl bg-muted flex items-center justify-center text-3xl font-bold text-foreground border border-border/40">
+      {/* Quick stats row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <Card className="border-border/40">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-indigo-500/10 shrink-0">
+              <CalendarDays className="w-5 h-5 text-indigo-500" />
+            </div>
+            <div>
+              <p className="text-2xl font-black text-foreground">{attendance.length}</p>
+              <p className="text-[11px] text-muted-foreground font-medium">Attendance Days</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border/40">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 shrink-0">
+              <Timer className="w-5 h-5 text-emerald-500" />
+            </div>
+            <div>
+              <p className="text-2xl font-black text-foreground">{avgHours}h</p>
+              <p className="text-[11px] text-muted-foreground font-medium">Avg Hours/Day</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border/40">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500/10 shrink-0">
+              <Award className="w-5 h-5 text-amber-500" />
+            </div>
+            <div>
+              <p className="text-2xl font-black text-foreground">{approvedLeaves.length}</p>
+              <p className="text-[11px] text-muted-foreground font-medium">Leaves Taken</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border/40">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-rose-500/10 shrink-0">
+              <TrendingUp className="w-5 h-5 text-rose-500" />
+            </div>
+            <div>
+              <p className="text-2xl font-black text-foreground">{pendingLeaves}</p>
+              <p className="text-[11px] text-muted-foreground font-medium">Pending Requests</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main layout */}
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* Left sidebar */}
+        <div className="space-y-4">
+          {/* Profile card */}
+          <Card className="border-border/40">
+            <CardContent className="p-6 flex flex-col items-center text-center">
+              <div className="w-20 h-20 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-2xl font-bold text-indigo-500 border-2 border-indigo-500/20">
                 {initials}
               </div>
-              <h2 className="text-2xl font-bold mt-5 text-foreground tracking-tight">{employee.name}</h2>
-              <p className="text-muted-foreground font-medium text-sm mt-1">
+              <h2 className="text-xl font-bold mt-4 text-foreground tracking-tight">{employee.name}</h2>
+              <p className="text-muted-foreground font-medium text-sm mt-0.5">
                 {employee.designation ?? "Employee"}
               </p>
 
@@ -139,39 +202,149 @@ export default function EmployeeProfilePage() {
               >
                 {employee.status}
               </Badge>
+            </CardContent>
+          </Card>
 
-              <div className="w-full space-y-3 pt-6 mt-6 border-t border-border/40">
-                <div className="flex items-center gap-3 text-sm font-medium text-left">
-                  <div className="p-2 rounded-lg border border-border/40">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <span className="truncate text-foreground/80">{employee.email}</span>
+          {/* Contact & details card */}
+          <Card className="border-border/40">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold">Contact & Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-3 text-sm">
+                <div className="p-2 rounded-lg bg-muted shrink-0">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
                 </div>
-                {employee.department && (
-                  <div className="flex items-center gap-3 text-sm font-medium text-left">
-                    <div className="p-2 rounded-lg border border-border/40">
-                      <Briefcase className="h-4 w-4 text-muted-foreground" />
+                <div className="min-w-0">
+                  <p className="text-[11px] text-muted-foreground">Email</p>
+                  <p className="font-medium text-foreground truncate">{employee.email}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 text-sm">
+                <div className="p-2 rounded-lg bg-muted shrink-0">
+                  <Briefcase className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] text-muted-foreground">Department</p>
+                  <p className="font-medium text-foreground">{employee.department ?? "—"}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 text-sm">
+                <div className="p-2 rounded-lg bg-muted shrink-0">
+                  <Shield className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] text-muted-foreground">Designation</p>
+                  <p className="font-medium text-foreground">{employee.designation ?? "—"}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 text-sm">
+                <div className="p-2 rounded-lg bg-muted shrink-0">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] text-muted-foreground">Joining Date</p>
+                  <p className="font-medium text-foreground">
+                    {employee.joining_date
+                      ? new Date(employee.joining_date).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Leave balance card */}
+          <Card className="border-border/40">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold">Leave Balance</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {balance ? (
+                [
+                  { label: "Annual", total: balance.annual_total, used: balance.annual_used, color: "indigo" },
+                  { label: "Sick", total: balance.sick_total, used: balance.sick_used, color: "amber" },
+                  { label: "Casual", total: balance.casual_total, used: balance.casual_used, color: "emerald" },
+                  { label: "Earned", total: balance.earned_total, used: balance.earned_used, color: "violet" },
+                  { label: "Maternity", total: balance.maternity_total, used: balance.maternity_used, color: "pink" },
+                  { label: "Paternity", total: balance.paternity_total, used: balance.paternity_used, color: "cyan" },
+                ].filter((b) => b.total > 0).map((b) => {
+                  const remaining = b.total - b.used;
+                  const pct = b.total > 0 ? (b.used / b.total) * 100 : 0;
+                  return (
+                    <div key={b.label} className="p-3 rounded-lg bg-muted/30">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-semibold text-foreground">{b.label}</span>
+                        <span className="text-[11px] font-bold text-muted-foreground">{remaining}/{b.total}</span>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={cn(
+                            "h-full rounded-full transition-all",
+                            pct > 80 ? "bg-rose-500" : pct > 50 ? "bg-amber-500" : "bg-indigo-500"
+                          )}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-[10px] text-muted-foreground">{b.used} used</span>
+                        <span className="text-[10px] text-muted-foreground">{remaining} left</span>
+                      </div>
                     </div>
-                    <span className="text-foreground/80">{employee.department}</span>
+                  );
+                })
+              ) : (
+                <>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-indigo-500/5">
+                    <span className="text-sm text-muted-foreground">Annual Leave</span>
+                    <span className="text-sm font-bold text-indigo-500">{annualLeaves} taken</span>
                   </div>
-                )}
-                {employee.joining_date && (
-                  <div className="flex items-center gap-3 text-sm font-medium text-left">
-                    <div className="p-2 rounded-lg border border-border/40">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <span className="text-foreground/80">
-                      Joined {new Date(employee.joining_date).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
-                    </span>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-amber-500/5">
+                    <span className="text-sm text-muted-foreground">Sick Leave</span>
+                    <span className="text-sm font-bold text-amber-500">{sickLeaves} taken</span>
                   </div>
-                )}
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-rose-500/5">
+                    <span className="text-sm text-muted-foreground">Other Leave</span>
+                    <span className="text-sm font-bold text-rose-500">{otherLeaves} taken</span>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Attendance summary */}
+          <Card className="border-border/40">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold">Attendance Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                  <span className="text-sm text-muted-foreground">Present</span>
+                </div>
+                <span className="text-sm font-bold text-foreground">{presentDays} days</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                  <span className="text-sm text-muted-foreground">Late</span>
+                </div>
+                <span className="text-sm font-bold text-foreground">{lateDays} days</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
+                  <span className="text-sm text-muted-foreground">Total Hours</span>
+                </div>
+                <span className="text-sm font-bold text-foreground">{totalHours.toFixed(1)}h</span>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Right column — Tabs */}
-        <div className="lg:col-span-8">
+        {/* Right content — Tabs */}
+        <div className="lg:col-span-2">
           <Tabs defaultValue="overview" className="w-full">
             <TabsList className="mb-6 w-full sm:w-auto overflow-x-auto h-auto p-1.5 gap-1">
               <TabsTrigger value="overview" className="gap-2 px-6 py-2.5">
@@ -187,53 +360,126 @@ export default function EmployeeProfilePage() {
 
             {/* Overview tab */}
             <TabsContent value="overview" className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <Card className="rounded-[1.5rem] border-none shadow-sm overflow-hidden">
-                <CardHeader className="bg-muted/10 border-b border-border/40 py-5">
-                  <CardTitle className="text-lg font-black tracking-tight flex items-center gap-2">
+              {/* Professional Details */}
+              <Card className="border-border/40">
+                <CardHeader className="border-b border-border/40 py-5">
+                  <CardTitle className="text-base font-bold flex items-center gap-2">
                     <Briefcase className="w-5 h-5 text-indigo-500" />
                     Professional Details
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="p-8">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                    <div className="space-y-1.5 p-4 rounded-2xl bg-muted/10 border border-border/20 hover:bg-muted/20 transition-all">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Department</p>
-                      <p className="font-black text-foreground text-lg italic">{employee.department ?? "—"}</p>
+                <CardContent className="p-6">
+                  <div className="grid sm:grid-cols-3 gap-4">
+                    <div className="p-4 rounded-xl bg-muted/30 border border-border/20">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Department</p>
+                      <p className="font-bold text-foreground text-lg mt-1">{employee.department ?? "—"}</p>
                     </div>
-                    <div className="space-y-1.5 p-4 rounded-2xl bg-muted/10 border border-border/20 hover:bg-muted/20 transition-all">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Designation</p>
-                      <p className="font-black text-foreground text-lg italic">{employee.designation ?? "—"}</p>
+                    <div className="p-4 rounded-xl bg-muted/30 border border-border/20">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Designation</p>
+                      <p className="font-bold text-foreground text-lg mt-1">{employee.designation ?? "—"}</p>
                     </div>
-                    <div className="space-y-1.5 p-4 rounded-2xl bg-muted/10 border border-border/20 hover:bg-muted/20 transition-all">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Joining Date</p>
-                      <p className="font-black text-foreground text-lg italic">
+                    <div className="p-4 rounded-xl bg-muted/30 border border-border/20">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Joining Date</p>
+                      <p className="font-bold text-foreground text-lg mt-1">
                         {employee.joining_date
                           ? new Date(employee.joining_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                           : "—"}
                       </p>
                     </div>
-                    <div className="space-y-1.5 border-l-4 border-indigo-500/30 pl-4 py-1">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Status</p>
-                      <p className="font-bold text-foreground">{employee.status}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Activity summary */}
+              <Card className="border-border/40">
+                <CardHeader className="border-b border-border/40 py-5">
+                  <CardTitle className="text-base font-bold flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5 text-indigo-500" />
+                    Activity Summary
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="border-l-4 border-indigo-500/30 pl-4 py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Status</p>
+                      <p className="font-bold text-foreground mt-1">{employee.status}</p>
                     </div>
-                    <div className="space-y-1.5 border-l-4 border-emerald-500/30 pl-4 py-1">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Total Leaves Taken</p>
-                      <p className="font-bold text-foreground">{leaves.length} request{leaves.length !== 1 ? "s" : ""}</p>
+                    <div className="border-l-4 border-emerald-500/30 pl-4 py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Total Attendance</p>
+                      <p className="font-bold text-foreground mt-1">{attendance.length} day{attendance.length !== 1 ? "s" : ""}</p>
                     </div>
-                    <div className="space-y-1.5 border-l-4 border-amber-500/30 pl-4 py-1">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Attendance Records</p>
-                      <p className="font-bold text-foreground">{attendance.length} day{attendance.length !== 1 ? "s" : ""}</p>
+                    <div className="border-l-4 border-amber-500/30 pl-4 py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Leave Requests</p>
+                      <p className="font-bold text-foreground mt-1">{leaves.length} request{leaves.length !== 1 ? "s" : ""}</p>
+                    </div>
+                    <div className="border-l-4 border-rose-500/30 pl-4 py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Average Working Hours</p>
+                      <p className="font-bold text-foreground mt-1">{avgHours} hours/day</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Recent attendance */}
+              {attendance.length > 0 && (
+                <Card className="border-border/40">
+                  <CardHeader className="border-b border-border/40 py-5">
+                    <CardTitle className="text-base font-bold flex items-center gap-2">
+                      <Clock className="w-5 h-5 text-indigo-500" />
+                      Recent Attendance
+                    </CardTitle>
+                    <CardDescription>Last 5 records</CardDescription>
+                  </CardHeader>
+                  <div className="overflow-auto">
+                    <Table>
+                      <TableHeader className="bg-muted/20">
+                        <TableRow className="border-border/40">
+                          <TableHead className="font-bold text-foreground">Date</TableHead>
+                          <TableHead className="font-bold text-foreground text-center">Check In</TableHead>
+                          <TableHead className="font-bold text-foreground text-center">Check Out</TableHead>
+                          <TableHead className="font-bold text-foreground text-center">Hours</TableHead>
+                          <TableHead className="font-bold text-foreground text-right pr-6">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {attendance.slice(0, 5).map((rec) => (
+                          <TableRow key={rec.id} className="hover:bg-muted/20 border-border/40">
+                            <TableCell className="font-medium">{rec.date}</TableCell>
+                            <TableCell className="text-center font-mono text-sm">
+                              {rec.check_in ? new Date(rec.check_in).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+                            </TableCell>
+                            <TableCell className="text-center font-mono text-sm">
+                              {rec.check_out ? new Date(rec.check_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+                            </TableCell>
+                            <TableCell className="text-center font-bold">
+                              {rec.total_hours ? `${rec.total_hours}h` : "—"}
+                            </TableCell>
+                            <TableCell className="text-right pr-6">
+                              <Badge
+                                className={cn(
+                                  "rounded-lg border-none px-3 py-0.5 font-bold text-xs",
+                                  rec.status === "Present" ? "bg-emerald-500/10 text-emerald-600"
+                                    : rec.status === "Late" ? "bg-amber-500/10 text-amber-600"
+                                    : "bg-rose-500/10 text-rose-600"
+                                )}
+                              >
+                                {rec.status}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </Card>
+              )}
             </TabsContent>
 
             {/* Attendance tab */}
             <TabsContent value="attendance" className="animate-in fade-in duration-300">
-              <Card className="rounded-[1.5rem] border-none shadow-sm overflow-hidden">
+              <Card className="border-border/40">
                 <CardHeader className="border-b border-border/40">
-                  <CardTitle className="text-sm font-black uppercase tracking-widest">Attendance History</CardTitle>
+                  <CardTitle className="text-sm font-bold uppercase tracking-wider">Attendance History</CardTitle>
                   <CardDescription>{attendance.length} records found</CardDescription>
                 </CardHeader>
                 {attendance.length === 0 ? (
@@ -292,32 +538,32 @@ export default function EmployeeProfilePage() {
 
             {/* Leave history tab */}
             <TabsContent value="leave" className="animate-in fade-in duration-300 space-y-6">
-              <Card className="rounded-[1.5rem] border-none shadow-sm overflow-hidden">
+              <Card className="border-border/40">
                 <CardHeader className="bg-indigo-500/5 border-b border-border/40">
-                  <CardTitle className="text-sm font-extrabold uppercase tracking-widest text-indigo-500">
+                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-indigo-500">
                     Leave Summary
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="p-8">
-                  <div className="grid grid-cols-3 gap-8">
-                    <div className="text-center">
-                      <div className="text-4xl font-black text-indigo-500">{annualLeaves}</div>
-                      <p className="text-[10px] font-black uppercase tracking-widest mt-2 text-muted-foreground">Annual Taken</p>
+                <CardContent className="p-6">
+                  <div className="grid grid-cols-3 gap-6">
+                    <div className="text-center p-4 rounded-xl bg-indigo-500/5">
+                      <div className="text-3xl font-black text-indigo-500">{annualLeaves}</div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest mt-2 text-muted-foreground">Annual Taken</p>
                     </div>
-                    <div className="text-center">
-                      <div className="text-4xl font-black text-amber-500">{sickLeaves}</div>
-                      <p className="text-[10px] font-black uppercase tracking-widest mt-2 text-muted-foreground">Sick Taken</p>
+                    <div className="text-center p-4 rounded-xl bg-amber-500/5">
+                      <div className="text-3xl font-black text-amber-500">{sickLeaves}</div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest mt-2 text-muted-foreground">Sick Taken</p>
                     </div>
-                    <div className="text-center">
-                      <div className="text-4xl font-black text-rose-500">{otherLeaves}</div>
-                      <p className="text-[10px] font-black uppercase tracking-widest mt-2 text-muted-foreground">Other</p>
+                    <div className="text-center p-4 rounded-xl bg-rose-500/5">
+                      <div className="text-3xl font-black text-rose-500">{otherLeaves}</div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest mt-2 text-muted-foreground">Other</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
               {leaves.length === 0 ? (
-                <Card className="rounded-[1.5rem] border-none shadow-sm">
+                <Card className="border-border/40">
                   <CardContent className="flex flex-col items-center py-16 text-muted-foreground">
                     <Award className="w-10 h-10 opacity-20 mb-3" />
                     <p className="text-sm font-medium">No leave requests found</p>
@@ -339,8 +585,8 @@ export default function EmployeeProfilePage() {
                             <Calendar className="w-5 h-5" />
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-sm font-black text-foreground">{leave.leave_type} Leave</span>
-                            <span className="text-[11px] font-bold text-muted-foreground mt-1 uppercase tracking-tight italic opacity-60">
+                            <span className="text-sm font-bold text-foreground">{leave.leave_type} Leave</span>
+                            <span className="text-[11px] font-medium text-muted-foreground mt-1">
                               {leave.start_date} → {leave.end_date} ({days} day{days !== 1 ? "s" : ""})
                             </span>
                             {leave.reason && (

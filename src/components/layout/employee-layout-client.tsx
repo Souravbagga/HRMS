@@ -7,13 +7,23 @@ import { useUserStore } from "@/store/userStore";
 import { ModeToggle } from "@/components/mode-toggle";
 import { UserNav } from "@/components/layout/user-nav";
 import { NotificationBell } from "@/components/layout/notification-bell";
-import { ShieldCheck, LayoutDashboard, Clock, CalendarDays, Settings } from "lucide-react";
+import {
+  ShieldCheck,
+  LayoutDashboard,
+  Clock,
+  CalendarDays,
+  Settings,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Profile } from "@/types";
 
 const navItems = [
   { name: "Overview", href: "/employee-dashboard", icon: LayoutDashboard },
-  { name: "My Attendance", href: "/employee-dashboard/attendance", icon: Clock },
+  {
+    name: "My Attendance",
+    href: "/employee-dashboard/attendance",
+    icon: Clock,
+  },
   { name: "My Leaves", href: "/employee-dashboard/leaves", icon: CalendarDays },
   { name: "Settings", href: "/employee-dashboard/settings", icon: Settings },
 ];
@@ -49,7 +59,9 @@ export function EmployeeLayoutClient({
             <div className="bg-primary rounded-lg p-1.5">
               <ShieldCheck className="w-6 h-6 text-white" />
             </div>
-            <span className="text-xl font-bold tracking-tight text-foreground">HRMS.pro</span>
+            <span className="text-xl font-bold tracking-tight text-foreground">
+              HRMS.pro
+            </span>
           </Link>
         </div>
 
@@ -58,7 +70,10 @@ export function EmployeeLayoutClient({
             Employee Portal
           </div>
           {navItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== "/employee-dashboard" && pathname.startsWith(item.href));
+            const isActive =
+              pathname === item.href ||
+              (item.href !== "/employee-dashboard" &&
+                pathname.startsWith(item.href));
             return (
               <Link
                 key={item.name}
@@ -67,10 +82,15 @@ export function EmployeeLayoutClient({
                   "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all group duration-200",
                   isActive
                     ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                 )}
               >
-                <item.icon className={cn("h-4 w-4 shrink-0", isActive ? "text-white" : "text-muted-foreground")} />
+                <item.icon
+                  className={cn(
+                    "h-4 w-4 shrink-0",
+                    isActive ? "text-white" : "text-muted-foreground",
+                  )}
+                />
                 <span>{item.name}</span>
               </Link>
             );
@@ -83,8 +103,12 @@ export function EmployeeLayoutClient({
               {initials}
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="text-sm font-semibold truncate text-foreground leading-none">{profile.name}</span>
-              <span className="text-[10px] text-muted-foreground truncate mt-1">{profile.email}</span>
+              <span className="text-sm font-semibold truncate text-foreground leading-none">
+                {profile.name}
+              </span>
+              <span className="text-[10px] text-muted-foreground truncate mt-1">
+                {profile.email}
+              </span>
             </div>
           </div>
         </div>
