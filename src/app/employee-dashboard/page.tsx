@@ -83,18 +83,33 @@ export default function EmployeeDashboardPage() {
       const now = new Date();
       const hour = now.getHours();
       const status = hour > 9 ? "Late" : "Present";
+      const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-      const { data } = await supabase
-        .from("attendance")
-        .insert({ user_id: profile.id, date: today, check_in: now.toISOString(), status })
-        .select()
-        .single();
+      let data;
+      if (todayRecord && todayRecord.check_out) {
+        // Resuming after a break — update existing record: reset check_in, clear check_out/total_hours
+        const { data: updated } = await supabase
+          .from("attendance")
+          .update({ check_in: now.toISOString(), check_out: null, total_hours: null })
+          .eq("id", todayRecord.id)
+          .select()
+          .single();
+        data = updated;
+      } else {
+        // First clock-in of the day — insert new record
+        const { data: inserted } = await supabase
+          .from("attendance")
+          .insert({ user_id: profile.id, date: today, check_in: now.toISOString(), status })
+          .select()
+          .single();
+        data = inserted;
+      }
 
       setTodayRecord(data as Attendance);
-      toast.success(`Clocked in at ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${status === "Late" ? " (Late)" : ""}`);
+      toast.success(`Clocked in at ${timeStr}${status === "Late" ? " (Late)" : ""}`);
       notifyAdmins({
         title: `${profile.name} clocked in`,
-        message: `Checked in at ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${status === "Late" ? " (Late)" : ""}`,
+        message: `Checked in at ${timeStr}${status === "Late" ? " (Late)" : ""}`,
         type: "clock_in",
       });
       fetchData();
@@ -181,7 +196,7 @@ export default function EmployeeDashboardPage() {
 
   const approvedLeaves = leaves.filter((l) => l.status === "approved").length;
   const pendingLeaves = leaves.filter((l) => l.status === "pending").length;
-  const isClockedIn = !!todayRecord?.check_in;
+  const isClockedIn = !!todayRecord?.check_in && !todayRecord?.check_out;
   const isClockedOut = !!todayRecord?.check_out;
 
   const totalHours = attendanceHistory.reduce((sum, a) => sum + (a.total_hours ?? 0), 0);
@@ -221,7 +236,7 @@ export default function EmployeeDashboardPage() {
                 </div>
                 <div>
                   <p className="text-lg font-black text-foreground">
-                    {isClockedOut ? "Done" : isClockedIn ? "Active" : "Idle"}
+                    {isClockedIn ? "Active" : isClockedOut ? "Break" : "Idle"}
                   </p>
                   <p className="text-[11px] text-muted-foreground font-medium">Today</p>
                 </div>
@@ -278,10 +293,10 @@ export default function EmployeeDashboardPage() {
             </CardHeader>
             <CardContent className="flex flex-col sm:flex-row items-center justify-between gap-6">
               <div className="text-center sm:text-left">
-                {isClockedOut ? (
+                {isClockedOut && !isClockedIn ? (
                   <>
-                    <div className="text-4xl font-bold tracking-tight text-foreground">{todayRecord?.total_hours}h</div>
-                    <p className="text-muted-foreground text-sm mt-1">Total hours today</p>
+                    <div className="text-2xl font-bold text-foreground">Session ended</div>
+                    <p className="text-muted-foreground text-sm mt-1">Last session: {todayRecord?.total_hours}h — Clock in again to start a new session</p>
                   </>
                 ) : isClockedIn ? (
                   <>
