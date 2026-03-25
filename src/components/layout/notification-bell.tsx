@@ -84,6 +84,32 @@ export function NotificationBell() {
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
+  // Real-time subscription for new notifications
+  useEffect(() => {
+    if (!profile) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel("notifications-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `user_id=eq.${profile.id}`,
+        },
+        (payload) => {
+          const newNotif = payload.new as Notification;
+          setNotifications((prev) => [newNotif, ...prev].slice(0, 20));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profile]);
+
   async function markAllRead() {
     if (!profile || unreadCount === 0) return;
     const supabase = createClient();
@@ -113,10 +139,11 @@ export function NotificationBell() {
           setOpen((v) => !v);
           if (!open) fetchNotifications();
         }}
+        aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ""}`}
       >
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && (
-          <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full border-2 border-background">
+          <span className="absolute top-1.5 right-1.5 min-w-4 h-4 px-1 flex items-center justify-center bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full border-2 border-background animate-in zoom-in duration-200">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
@@ -128,6 +155,11 @@ export function NotificationBell() {
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
             <h3 className="text-sm font-semibold text-foreground">
               Notifications
+              {unreadCount > 0 && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  ({unreadCount} unread)
+                </span>
+              )}
             </h3>
             {unreadCount > 0 && (
               <button
@@ -141,7 +173,7 @@ export function NotificationBell() {
           </div>
 
           {/* Notification list */}
-          <div className="max-h-[400px] overflow-y-auto">
+          <div className="max-h-100 overflow-y-auto">
             {loading && notifications.length === 0 ? (
               <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -150,7 +182,8 @@ export function NotificationBell() {
             ) : notifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                 <Bell className="w-8 h-8 opacity-20 mb-2" />
-                <p className="text-sm">No notifications yet</p>
+                <p className="text-sm font-medium">All caught up</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">No notifications yet</p>
               </div>
             ) : (
               notifications.map((notif) => {
@@ -161,7 +194,7 @@ export function NotificationBell() {
                     onClick={() => !notif.read && markOneRead(notif.id)}
                     className={cn(
                       "w-full flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 border-b border-border/20 last:border-b-0",
-                      !notif.read && "bg-muted/30",
+                      !notif.read && "bg-primary/5",
                     )}
                   >
                     <div

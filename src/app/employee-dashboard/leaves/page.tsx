@@ -1,12 +1,9 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -20,6 +17,9 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabaseClient";
 import { useUserStore } from "@/store/userStore";
 import { notifyAdmins } from "@/lib/notifications";
+import { DataTable, type Column } from "@/components/ui/data-table";
+import { StatCard } from "@/components/ui/stat-card";
+import { toast } from "sonner";
 import type { Leave, LeaveType, LeaveBalance } from "@/types";
 
 export default function MyLeavesPage() {
@@ -29,8 +29,6 @@ export default function MyLeavesPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [leaveLoading, setLeaveLoading] = useState(false);
-  const [leaveError, setLeaveError] = useState("");
-  const [leaveSuccess, setLeaveSuccess] = useState(false);
 
   const [leaveForm, setLeaveForm] = useState({
     leaveType: "" as LeaveType | "",
@@ -74,7 +72,6 @@ export default function MyLeavesPage() {
     fetchData();
   }, [fetchData]);
 
-  // Calculate remaining for a leave type
   function getBalanceField(field: string): number {
     if (!balance) return 0;
     return (balance as unknown as Record<string, number>)[field] ?? 0;
@@ -95,20 +92,18 @@ export default function MyLeavesPage() {
 
   async function handleApplyLeave(e: React.FormEvent) {
     e.preventDefault();
-    setLeaveError("");
-    if (!leaveForm.leaveType) { setLeaveError("Select a leave type."); return; }
-    if (!leaveForm.startDate || !leaveForm.endDate) { setLeaveError("Select start and end dates."); return; }
-    if (new Date(leaveForm.endDate) < new Date(leaveForm.startDate)) { setLeaveError("End date must be after start date."); return; }
+    if (!leaveForm.leaveType) { toast.error("Please select a leave type."); return; }
+    if (!leaveForm.startDate || !leaveForm.endDate) { toast.error("Please select start and end dates."); return; }
+    if (new Date(leaveForm.endDate) < new Date(leaveForm.startDate)) { toast.error("End date must be after start date."); return; }
     if (!profile) return;
 
-    // Check balance
     if (leaveForm.leaveType !== "Unpaid") {
       const days = Math.ceil(
         (new Date(leaveForm.endDate).getTime() - new Date(leaveForm.startDate).getTime()) / (1000 * 60 * 60 * 24)
       ) + 1;
       const remaining = getRemaining(leaveForm.leaveType);
       if (days > remaining) {
-        setLeaveError(`Insufficient ${leaveForm.leaveType} leave balance. You have ${remaining} day(s) remaining but requested ${days}.`);
+        toast.error(`Insufficient ${leaveForm.leaveType} leave balance. You have ${remaining} day(s) remaining but requested ${days}.`);
         return;
       }
     }
@@ -124,18 +119,17 @@ export default function MyLeavesPage() {
       status: "pending",
     });
 
-    if (error) { setLeaveError(error.message); setLeaveLoading(false); return; }
+    if (error) { toast.error(error.message); setLeaveLoading(false); return; }
 
     notifyAdmins({
       title: `${profile.name} applied for leave`,
       message: `${leaveForm.leaveType} leave: ${leaveForm.startDate} → ${leaveForm.endDate}`,
       type: "leave_applied",
     });
-    setLeaveSuccess(true);
+    toast.success("Leave request submitted successfully!");
     setLeaveForm({ leaveType: "", startDate: "", endDate: "", reason: "" });
     setLeaveLoading(false);
     setShowForm(false);
-    setTimeout(() => setLeaveSuccess(false), 3000);
     fetchData();
   }
 
@@ -145,9 +139,70 @@ export default function MyLeavesPage() {
 
   const leaveTypes = ["Annual", "Sick", "Casual", "Earned", "Maternity", "Paternity"] as const;
 
+  const columns: Column<Leave>[] = [
+    {
+      key: "type",
+      header: "Type",
+      sortable: true,
+      sortFn: (a, b) => a.leave_type.localeCompare(b.leave_type),
+      cell: (leave) => <span className="font-bold text-indigo-500 text-sm">{leave.leave_type}</span>,
+    },
+    {
+      key: "period",
+      header: "Period",
+      sortable: true,
+      sortFn: (a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime(),
+      cell: (leave) => (
+        <span className="text-sm text-muted-foreground whitespace-nowrap">
+          {new Date(leave.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+          {" → "}
+          {new Date(leave.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+        </span>
+      ),
+    },
+    {
+      key: "days",
+      header: "Days",
+      headerClassName: "text-center",
+      className: "text-center",
+      cell: (leave) => {
+        const days = Math.ceil(
+          (new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 60 * 60 * 24)
+        ) + 1;
+        return <span className="font-semibold">{days}</span>;
+      },
+    },
+    {
+      key: "reason",
+      header: "Reason",
+      cell: (leave) => (
+        <span className="text-sm text-muted-foreground max-w-50 truncate block">
+          {leave.reason ?? "—"}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      headerClassName: "text-right pr-6",
+      className: "text-right pr-6",
+      cell: (leave) => (
+        <Badge
+          className={cn(
+            "rounded-lg border-none px-3 py-0.5 font-semibold text-xs",
+            leave.status === "approved" ? "bg-emerald-500/10 text-emerald-600"
+              : leave.status === "rejected" ? "bg-rose-500/10 text-rose-600"
+              : "bg-amber-500/10 text-amber-600"
+          )}
+        >
+          {leave.status}
+        </Badge>
+      ),
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-6 w-full">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-foreground">My Leaves</h1>
@@ -162,33 +217,19 @@ export default function MyLeavesPage() {
         </Button>
       </div>
 
-      {leaveSuccess && (
-        <div className="flex items-center gap-3 text-sm font-semibold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3">
-          <CheckCircle2 className="w-5 h-5 shrink-0" />
-          Leave request submitted successfully! Your manager will review it shortly.
-        </div>
-      )}
-
       {/* Apply Leave Form */}
       {showForm && (
-        <Card className="border-2 border-indigo-500/20 shadow-lg shadow-indigo-500/5">
+        <Card className="border-2 border-indigo-500/20 shadow-lg shadow-indigo-500/5 animate-in slide-in-from-top-2 duration-200">
           <CardHeader>
             <CardTitle className="text-lg font-bold">New Leave Request</CardTitle>
-            <CardDescription className="text-xs">Fill in the details below to submit your request.</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleApplyLeave} className="space-y-4">
-              {leaveError && (
-                <div className="text-xs font-semibold text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-2">
-                  {leaveError}
-                </div>
-              )}
-
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold">Leave Type</Label>
+                  <Label htmlFor="leave-type-select" className="text-xs font-bold">Leave Type</Label>
                   <Select value={leaveForm.leaveType} onValueChange={(v) => v && setLeaveForm((p) => ({ ...p, leaveType: v as LeaveType }))}>
-                    <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                    <SelectTrigger id="leave-type-select"><SelectValue placeholder="Select type" /></SelectTrigger>
                     <SelectContent>
                       {(["Annual", "Sick", "Casual", "Maternity", "Paternity", "Unpaid"] as const).map((type) => (
                         <SelectItem key={type} value={type}>
@@ -204,12 +245,12 @@ export default function MyLeavesPage() {
                   )}
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold">Start Date</Label>
-                  <Input type="date" value={leaveForm.startDate} onChange={(e) => setLeaveForm((p) => ({ ...p, startDate: e.target.value }))} />
+                  <Label htmlFor="leave-start" className="text-xs font-bold">Start Date</Label>
+                  <Input id="leave-start" type="date" value={leaveForm.startDate} onChange={(e) => setLeaveForm((p) => ({ ...p, startDate: e.target.value }))} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold">End Date</Label>
-                  <Input type="date" value={leaveForm.endDate} onChange={(e) => setLeaveForm((p) => ({ ...p, endDate: e.target.value }))} />
+                  <Label htmlFor="leave-end" className="text-xs font-bold">End Date</Label>
+                  <Input id="leave-end" type="date" value={leaveForm.endDate} onChange={(e) => setLeaveForm((p) => ({ ...p, endDate: e.target.value }))} />
                 </div>
               </div>
 
@@ -222,8 +263,9 @@ export default function MyLeavesPage() {
               )}
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold">Reason (optional)</Label>
+                <Label htmlFor="leave-reason" className="text-xs font-bold">Reason (optional)</Label>
                 <Textarea
+                  id="leave-reason"
                   placeholder="Brief reason for leave..."
                   className="resize-none h-20"
                   value={leaveForm.reason}
@@ -240,120 +282,29 @@ export default function MyLeavesPage() {
         </Card>
       )}
 
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        <StatCard title="Pending" value={pending} icon={Clock} iconColor="bg-amber-500/10 text-amber-500" loading={loading} />
+        <StatCard title="Approved" value={approved} icon={CheckCircle2} iconColor="bg-emerald-500/10 text-emerald-500" loading={loading} />
+        <StatCard title="Rejected" value={rejected} icon={XCircle} iconColor="bg-rose-500/10 text-rose-500" loading={loading} />
+      </div>
+
       {/* Main layout */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Left — Table — 2/3 */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Stats Cards */}
-          <div className="grid grid-cols-3 gap-4">
-            <Card className="border-border/40">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-amber-500/10 shrink-0">
-                  <Clock className="w-5 h-5 text-amber-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-black text-foreground">{loading ? "—" : pending}</p>
-                  <p className="text-[11px] text-muted-foreground font-medium">Pending</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-border/40">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-emerald-500/10 shrink-0">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-black text-foreground">{loading ? "—" : approved}</p>
-                  <p className="text-[11px] text-muted-foreground font-medium">Approved</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-border/40">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-rose-500/10 shrink-0">
-                  <XCircle className="w-5 h-5 text-rose-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-black text-foreground">{loading ? "—" : rejected}</p>
-                  <p className="text-[11px] text-muted-foreground font-medium">Rejected</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Leave History Table */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-bold">Leave History</CardTitle>
-              <CardDescription className="text-xs">{loading ? "Loading..." : `${leaves.length} total requests`}</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0">
-              {loading ? (
-                <div className="flex items-center justify-center py-16 gap-3 text-muted-foreground">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span className="text-sm">Loading...</span>
-                </div>
-              ) : leaves.length === 0 ? (
-                <div className="text-center py-16 text-muted-foreground text-sm">
-                  No leave requests yet. Click &quot;Apply for Leave&quot; to submit your first request.
-                </div>
-              ) : (
-                <div className="overflow-auto">
-                  <Table>
-                    <TableHeader className="bg-muted/30">
-                      <TableRow className="border-border/40">
-                        <TableHead className="font-bold text-foreground">Type</TableHead>
-                        <TableHead className="font-bold text-foreground">Period</TableHead>
-                        <TableHead className="font-bold text-foreground text-center">Days</TableHead>
-                        <TableHead className="font-bold text-foreground">Reason</TableHead>
-                        <TableHead className="font-bold text-foreground text-center">Submitted</TableHead>
-                        <TableHead className="font-bold text-foreground text-right pr-6">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {leaves.map((leave) => {
-                        const days = Math.ceil(
-                          (new Date(leave.end_date).getTime() - new Date(leave.start_date).getTime()) / (1000 * 60 * 60 * 24)
-                        ) + 1;
-                        return (
-                          <TableRow key={leave.id} className="hover:bg-muted/20 transition-colors border-border/40">
-                            <TableCell className="font-bold text-indigo-500 text-sm">{leave.leave_type}</TableCell>
-                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                              {new Date(leave.start_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                              {" → "}
-                              {new Date(leave.end_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                            </TableCell>
-                            <TableCell className="text-center font-bold">{days}</TableCell>
-                            <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
-                              {leave.reason ?? "—"}
-                            </TableCell>
-                            <TableCell className="text-center text-sm text-muted-foreground">
-                              {new Date(leave.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                            </TableCell>
-                            <TableCell className="text-right pr-6">
-                              <Badge
-                                className={cn(
-                                  "rounded-lg border-none px-3 py-0.5 font-bold text-xs",
-                                  leave.status === "approved" ? "bg-emerald-500/10 text-emerald-600"
-                                    : leave.status === "rejected" ? "bg-rose-500/10 text-rose-600"
-                                    : "bg-amber-500/10 text-amber-600"
-                                )}
-                              >
-                                {leave.status}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <div className="lg:col-span-2">
+          <DataTable
+            columns={columns}
+            data={leaves}
+            loading={loading}
+            searchable={false}
+            emptyTitle="No leave requests yet"
+            emptyDescription="Click Apply for Leave to submit your first request."
+            emptyIcon={CalendarDays}
+            pageSize={10}
+          />
         </div>
 
-        {/* Right sidebar — 1/3 */}
+        {/* Right sidebar */}
         <div className="space-y-4">
           {/* Leave Balance */}
           <Card>
@@ -390,7 +341,7 @@ export default function MyLeavesPage() {
                       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                         <div
                           className={cn(
-                            "h-full rounded-full transition-all",
+                            "h-full rounded-full transition-all duration-500",
                             percentage > 80 ? "bg-rose-500" : percentage > 50 ? "bg-amber-500" : "bg-indigo-500"
                           )}
                           style={{ width: `${percentage}%` }}
@@ -430,38 +381,6 @@ export default function MyLeavesPage() {
               ))}
             </CardContent>
           </Card>
-
-          {/* Recent activity */}
-          {leaves.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <CalendarDays className="w-4 h-4 text-indigo-500" />
-                  Recent Requests
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {leaves.slice(0, 4).map((leave) => (
-                  <div key={leave.id} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-foreground">{leave.leave_type}</p>
-                      <p className="text-[11px] text-muted-foreground">{leave.start_date}</p>
-                    </div>
-                    <Badge
-                      className={cn(
-                        "rounded-md border-none px-2 py-0.5 font-bold text-[10px]",
-                        leave.status === "approved" ? "bg-emerald-500/10 text-emerald-600"
-                          : leave.status === "rejected" ? "bg-rose-500/10 text-rose-600"
-                          : "bg-amber-500/10 text-amber-600"
-                      )}
-                    >
-                      {leave.status}
-                    </Badge>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 # HRMS.pro — Human Resource Management System
 
-A modern, full-stack HRMS built with **Next.js 16**, **React 19**, **Supabase**, and **Tailwind CSS**. Features role-based dashboards for admins and employees, covering employee management, attendance tracking, leave management, and real-time notifications.
+A modern, production-ready HRMS built with **Next.js 16**, **React 19**, **Supabase**, and **Tailwind CSS 4**. Features role-based dashboards for admins and employees, covering employee management, attendance tracking, leave management, and real-time notifications — with a polished SaaS-grade UX.
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)
@@ -21,6 +21,7 @@ A modern, full-stack HRMS built with **Next.js 16**, **React 19**, **Supabase**,
 | State Management | Zustand |
 | Charts | Recharts |
 | Forms | React Hook Form + Zod validation |
+| Toasts | Sonner (rich toast notifications) |
 | Icons | Lucide React |
 | Theming | next-themes (dark/light mode) |
 
@@ -29,24 +30,39 @@ A modern, full-stack HRMS built with **Next.js 16**, **React 19**, **Supabase**,
 ## Features
 
 ### Admin Dashboard
-- **Dashboard Analytics** — Real-time KPIs (total employees, present today, on leave, pending requests), 7-day attendance trend chart, recent leave requests
-- **Employee Management** — Add, view, edit, and search employees. Email invitation system for onboarding. Auto-initializes leave balances on creation
-- **Attendance Tracking** — View all employee clock-in/out records, average work hours, late check-in detection
-- **Leave Management** — Approve/reject leave requests with automatic balance deduction. Supports 6 leave types (Annual, Sick, Casual, Maternity, Paternity, Unpaid)
-- **Notifications** — Real-time alerts for clock-ins, leave applications, and employee additions
+- **Dashboard Analytics** — Real-time KPIs with trend indicators (total employees, present today with day-over-day comparison, on leave with attendance rate %, pending requests). 7-day attendance trend chart with improved tooltips. Gradient insight cards for attendance rate, total approved leaves, and pending actions
+- **Employee Management** — Add, view, edit, and search employees with a reusable DataTable component featuring pagination, column sorting, and full-text search. Email invitation system for onboarding. Auto-initializes leave balances on creation
+- **Attendance Tracking** — View all employee clock-in/out records with sortable/searchable DataTable, status filters (All/Present/Late/Absent), average work hours, late detection stats, and a today's summary card
+- **Leave Management** — Approve/reject leave requests with toast confirmations, automatic balance deduction, filterable DataTable (All/Pending), approval rate stats, and loading states on action buttons
+- **Notifications** — Real-time Supabase subscription alerts with mark-as-read, unread badge with animation, and polling fallback
 
 ### Employee Dashboard
-- **Clock In/Out** — One-click attendance with automatic late detection (after 9:00 AM). Calculates total hours worked
-- **Leave Applications** — Apply for leave with real-time balance validation. View leave history and remaining balances with progress bars
-- **Attendance History** — Full personal attendance log with status badges
+- **Clock In/Out** — One-click attendance with automatic late detection (after 9:00 AM). Calculates total hours worked. Toast notifications on success/failure
+- **Leave Applications** — Apply for leave with real-time balance validation, toast feedback, and auto-form reset on success. DataTable with sorting for leave history. Progress bars for remaining balances
+- **Attendance History** — Full personal attendance log with DataTable (pagination, sorting), stat cards with skeleton loading, and attendance policy reference
 - **Profile Settings** — Update display name and change password
 
 ### System Features
-- **Role-Based Access Control** — Separate admin and employee dashboards with server-side route protection
+- **Edge Middleware Route Protection** — Strict role-based access control enforced at the edge via Next.js middleware. Admin routes blocked for employees, employee routes blocked for admins, unauthenticated users redirected to login
 - **Email Invitation Flow** — Admin sends invite, employee sets password via secure link, account auto-links to employee record
 - **Leave Balance System** — Auto-initialized quotas, deducted on approval, restored on rejection
 - **Dark/Light Mode** — Full theme support across the entire application
-- **Responsive Design** — Mobile-friendly with collapsible sidebar and responsive tables
+- **Responsive Design** — Mobile-optimized with collapsible sidebar drawer, bottom navigation bar for employees, horizontally scrollable tables, and responsive grid layouts
+- **Toast Notifications** — Rich success/error feedback using Sonner for all user actions (clock in/out, leave submit, approve/reject)
+- **Smooth Transitions** — Page fade-in animations, button hover/active states, skeleton loading states, and custom scrollbar styling
+
+---
+
+## Reusable Component Library
+
+| Component | Description |
+|-----------|-------------|
+| `DataTable` | Generic table with pagination, column sorting, search, filters, toolbar, loading skeletons, empty/error states |
+| `StatCard` | KPI card with icon, value, trend indicator, and skeleton loading state |
+| `EmptyState` | Illustrated empty state with icon, title, description, and optional action |
+| `ErrorState` | Error display with message and retry button |
+| `TableSkeleton` | Shimmer loading placeholder for tables |
+| `Toaster` | Theme-aware toast notification provider (Sonner) |
 
 ---
 
@@ -72,18 +88,18 @@ A modern, full-stack HRMS built with **Next.js 16**, **React 19**, **Supabase**,
 src/
 ├── app/
 │   ├── (dashboard)/              # Admin routes (grouped layout)
-│   │   ├── dashboard/            # Admin home — KPIs & charts
-│   │   ├── attendance/           # Attendance management
-│   │   ├── employees/            # Employee CRUD
+│   │   ├── dashboard/            # Admin home — KPIs, insights & charts
+│   │   ├── attendance/           # Attendance management with DataTable
+│   │   ├── employees/            # Employee CRUD with DataTable
 │   │   │   ├── new/              # Add employee + send invite
 │   │   │   └── [id]/             # Employee profile
 │   │   │       └── edit/         # Edit employee details
-│   │   ├── leave/                # Leave approval/rejection
+│   │   ├── leave/                # Leave approval/rejection with DataTable
 │   │   │   └── apply/            # Apply leave (admin)
 │   │   └── settings/             # Admin settings
 │   ├── employee-dashboard/       # Employee routes
-│   │   ├── attendance/           # Personal attendance history
-│   │   ├── leaves/               # Apply & track leaves
+│   │   ├── attendance/           # Personal attendance with DataTable
+│   │   ├── leaves/               # Apply & track leaves with DataTable
 │   │   └── settings/             # Employee settings
 │   ├── api/
 │   │   └── employees/invite/     # Email invitation API
@@ -93,16 +109,26 @@ src/
 │   ├── login/                    # Login page
 │   └── register/                 # First-time admin setup
 ├── components/
-│   ├── layout/                   # Sidebar, header, navigation
-│   ├── ui/                       # shadcn/ui components
+│   ├── layout/                   # Sidebar, header, mobile nav, notification bell
+│   ├── ui/                       # shadcn/ui + custom reusable components
+│   │   ├── data-table.tsx        # Generic DataTable with pagination & sorting
+│   │   ├── stat-card.tsx         # KPI stat card with trends
+│   │   ├── empty-state.tsx       # Empty state component
+│   │   ├── error-state.tsx       # Error state with retry
+│   │   ├── table-skeleton.tsx    # Table loading skeleton
+│   │   ├── sonner.tsx            # Toast notification provider
+│   │   └── ...                   # shadcn/ui base components
 │   ├── charts/                   # Attendance chart (Recharts)
 │   └── dashboard/                # Dashboard widgets
+├── hooks/
+│   └── use-supabase-query.ts     # Reusable data fetching hook
 ├── lib/
 │   ├── supabaseClient.ts         # Browser Supabase client
 │   ├── supabaseServer.ts         # Server-side Supabase client
 │   ├── supabaseAdmin.ts          # Admin client (invites)
 │   ├── notifications.ts          # Notification helpers
-│   └── utils.ts                  # Utility functions
+│   └── utils.ts                  # Utility functions (cn)
+├── middleware.ts                  # Edge middleware for route protection
 ├── store/
 │   └── userStore/                # Zustand state (user profile)
 └── types/
@@ -123,17 +149,18 @@ src/
 ### Attendance Tracking
 1. Employee opens their dashboard and clicks **"Clock In"**
 2. System records the timestamp; marks as **Late** if after 9:00 AM
-3. Employee clicks **"Clock Out"** when leaving
-4. Total hours are calculated automatically
-5. Records appear in both employee and admin attendance logs
+3. Toast notification confirms the action
+4. Employee clicks **"Clock Out"** when leaving
+5. Total hours are calculated automatically
+6. Records appear in both employee and admin attendance logs with pagination
 
 ### Leave Application
 1. Employee selects leave type, dates, and reason
 2. System validates against remaining balance (prevents over-application)
-3. Request is submitted with **"pending"** status; admins are notified
+3. Request is submitted with **"pending"** status; admins are notified in real-time
 4. Admin approves or rejects from the Leave Management page
 5. On approval: balance is deducted. On rejection of approved leave: balance is restored
-6. Employee receives a notification of the decision
+6. Toast confirms the action; employee receives a notification of the decision
 
 ---
 

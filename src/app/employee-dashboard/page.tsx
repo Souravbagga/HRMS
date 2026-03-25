@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Clock, CalendarDays, Loader2, LogIn, LogOut, Send, Timer, TrendingUp, Award, Calendar,
 } from "lucide-react";
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabaseClient";
 import { useUserStore } from "@/store/userStore";
 import { notifyAdmins } from "@/lib/notifications";
+import { toast } from "sonner";
 import type { Attendance, Leave, LeaveType, LeaveBalance } from "@/types";
 
 export default function EmployeeDashboardPage() {
@@ -32,8 +34,6 @@ export default function EmployeeDashboardPage() {
   const [clockLoading, setClockLoading] = useState(false);
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
-  const [leaveError, setLeaveError] = useState("");
-  const [leaveSuccess, setLeaveSuccess] = useState(false);
 
   const [leaveForm, setLeaveForm] = useState({
     leaveType: "" as LeaveType | "",
@@ -78,55 +78,66 @@ export default function EmployeeDashboardPage() {
   async function handleClockIn() {
     if (!profile) return;
     setClockLoading(true);
-    const supabase = createClient();
-    const now = new Date();
-    const hour = now.getHours();
-    const status = hour > 9 ? "Late" : "Present";
+    try {
+      const supabase = createClient();
+      const now = new Date();
+      const hour = now.getHours();
+      const status = hour > 9 ? "Late" : "Present";
 
-    const { data } = await supabase
-      .from("attendance")
-      .insert({ user_id: profile.id, date: today, check_in: now.toISOString(), status })
-      .select()
-      .single();
+      const { data } = await supabase
+        .from("attendance")
+        .insert({ user_id: profile.id, date: today, check_in: now.toISOString(), status })
+        .select()
+        .single();
 
-    setTodayRecord(data as Attendance);
-    setClockLoading(false);
-    notifyAdmins({
-      title: `${profile.name} clocked in`,
-      message: `Checked in at ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${status === "Late" ? " (Late)" : ""}`,
-      type: "clock_in",
-    });
-    fetchData();
+      setTodayRecord(data as Attendance);
+      toast.success(`Clocked in at ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${status === "Late" ? " (Late)" : ""}`);
+      notifyAdmins({
+        title: `${profile.name} clocked in`,
+        message: `Checked in at ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${status === "Late" ? " (Late)" : ""}`,
+        type: "clock_in",
+      });
+      fetchData();
+    } catch {
+      toast.error("Failed to clock in. Please try again.");
+    } finally {
+      setClockLoading(false);
+    }
   }
 
   async function handleClockOut() {
     if (!todayRecord) return;
     setClockLoading(true);
-    const supabase = createClient();
-    const now = new Date();
-    const checkIn = new Date(todayRecord.check_in!);
-    const totalHours = parseFloat(((now.getTime() - checkIn.getTime()) / (1000 * 60 * 60)).toFixed(2));
+    try {
+      const supabase = createClient();
+      const now = new Date();
+      const checkIn = new Date(todayRecord.check_in!);
+      const totalHours = parseFloat(((now.getTime() - checkIn.getTime()) / (1000 * 60 * 60)).toFixed(2));
 
-    await supabase
-      .from("attendance")
-      .update({ check_out: now.toISOString(), total_hours: totalHours })
-      .eq("id", todayRecord.id);
+      await supabase
+        .from("attendance")
+        .update({ check_out: now.toISOString(), total_hours: totalHours })
+        .eq("id", todayRecord.id);
 
-    setClockLoading(false);
-    notifyAdmins({
-      title: `${profile?.name} clocked out`,
-      message: `Total hours: ${totalHours}h`,
-      type: "clock_out",
-    });
-    fetchData();
+      toast.success(`Clocked out. Total hours: ${totalHours}h`);
+      notifyAdmins({
+        title: `${profile?.name} clocked out`,
+        message: `Total hours: ${totalHours}h`,
+        type: "clock_out",
+      });
+      fetchData();
+    } catch {
+      toast.error("Failed to clock out. Please try again.");
+    } finally {
+      setClockLoading(false);
+    }
   }
 
   async function handleApplyLeave(e: React.FormEvent) {
     e.preventDefault();
-    setLeaveError("");
-    if (!leaveForm.leaveType) { setLeaveError("Select a leave type."); return; }
-    if (!leaveForm.startDate || !leaveForm.endDate) { setLeaveError("Select start and end dates."); return; }
-    if (new Date(leaveForm.endDate) < new Date(leaveForm.startDate)) { setLeaveError("End date must be after start date."); return; }
+    if (!leaveForm.leaveType) { toast.error("Please select a leave type."); return; }
+    if (!leaveForm.startDate || !leaveForm.endDate) { toast.error("Please select start and end dates."); return; }
+    if (new Date(leaveForm.endDate) < new Date(leaveForm.startDate)) { toast.error("End date must be after start date."); return; }
     if (!profile) return;
 
     // Check balance
@@ -139,7 +150,7 @@ export default function EmployeeDashboardPage() {
       const used = (balance as unknown as Record<string, number>)[`${key}_used`] ?? 0;
       const remaining = total - used;
       if (days > remaining) {
-        setLeaveError(`Insufficient ${leaveForm.leaveType} leave balance. You have ${remaining} day(s) remaining but requested ${days}.`);
+        toast.error(`Insufficient ${leaveForm.leaveType} leave balance. You have ${remaining} day(s) remaining but requested ${days}.`);
         return;
       }
     }
@@ -155,17 +166,16 @@ export default function EmployeeDashboardPage() {
       status: "pending",
     });
 
-    if (error) { setLeaveError(error.message); setLeaveLoading(false); return; }
+    if (error) { toast.error(error.message); setLeaveLoading(false); return; }
 
     notifyAdmins({
       title: `${profile.name} applied for leave`,
       message: `${leaveForm.leaveType} leave: ${leaveForm.startDate} → ${leaveForm.endDate}`,
       type: "leave_applied",
     });
-    setLeaveSuccess(true);
+    toast.success("Leave request submitted successfully!");
     setLeaveForm({ leaveType: "", startDate: "", endDate: "", reason: "" });
     setLeaveLoading(false);
-    setTimeout(() => setLeaveSuccess(false), 3000);
     fetchData();
   }
 
@@ -174,13 +184,11 @@ export default function EmployeeDashboardPage() {
   const isClockedIn = !!todayRecord?.check_in;
   const isClockedOut = !!todayRecord?.check_out;
 
-  // Stats
   const totalHours = attendanceHistory.reduce((sum, a) => sum + (a.total_hours ?? 0), 0);
-  const avgHours = attendanceHistory.length > 0 ? (totalHours / attendanceHistory.filter(a => a.total_hours).length || 0).toFixed(1) : "0";
+  const avgHours = attendanceHistory.length > 0 ? (totalHours / (attendanceHistory.filter(a => a.total_hours).length || 1)).toFixed(1) : "0";
 
   return (
     <div className="flex flex-col gap-6 w-full">
-      {/* Header */}
       <div>
         <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
           Welcome, {profile?.name?.split(" ")[0] ?? "Employee"}
@@ -192,57 +200,73 @@ export default function EmployeeDashboardPage() {
 
       {/* Quick stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card className="border-border/40">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className={cn("p-2.5 rounded-xl shrink-0", isClockedIn && !isClockedOut ? "bg-emerald-500/10" : "bg-muted")}>
-              <Clock className={cn("w-5 h-5", isClockedIn && !isClockedOut ? "text-emerald-500" : "text-muted-foreground")} />
-            </div>
-            <div>
-              <p className="text-lg font-black text-foreground">
-                {dataLoading ? "—" : isClockedOut ? "Done" : isClockedIn ? "Active" : "Idle"}
-              </p>
-              <p className="text-[11px] text-muted-foreground font-medium">Today</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/40">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-indigo-500/10 shrink-0">
-              <Timer className="w-5 h-5 text-indigo-500" />
-            </div>
-            <div>
-              <p className="text-lg font-black text-foreground">{avgHours}h</p>
-              <p className="text-[11px] text-muted-foreground font-medium">Avg Hours</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/40">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500/10 shrink-0">
-              <CalendarDays className="w-5 h-5 text-amber-500" />
-            </div>
-            <div>
-              <p className="text-lg font-black text-foreground">{dataLoading ? "—" : pendingLeaves}</p>
-              <p className="text-[11px] text-muted-foreground font-medium">Pending Leaves</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/40">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 shrink-0">
-              <Award className="w-5 h-5 text-emerald-500" />
-            </div>
-            <div>
-              <p className="text-lg font-black text-foreground">{dataLoading ? "—" : approvedLeaves}</p>
-              <p className="text-[11px] text-muted-foreground font-medium">Approved Leaves</p>
-            </div>
-          </CardContent>
-        </Card>
+        {dataLoading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} className="border-border/40">
+              <CardContent className="p-4 flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-xl" />
+                <div className="space-y-2">
+                  <Skeleton className="h-5 w-12" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <>
+            <Card className="border-border/40">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className={cn("p-2.5 rounded-xl shrink-0", isClockedIn && !isClockedOut ? "bg-emerald-500/10" : "bg-muted")}>
+                  <Clock className={cn("w-5 h-5", isClockedIn && !isClockedOut ? "text-emerald-500" : "text-muted-foreground")} />
+                </div>
+                <div>
+                  <p className="text-lg font-black text-foreground">
+                    {isClockedOut ? "Done" : isClockedIn ? "Active" : "Idle"}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground font-medium">Today</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/40">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-indigo-500/10 shrink-0">
+                  <Timer className="w-5 h-5 text-indigo-500" />
+                </div>
+                <div>
+                  <p className="text-lg font-black text-foreground">{avgHours}h</p>
+                  <p className="text-[11px] text-muted-foreground font-medium">Avg Hours</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/40">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-500/10 shrink-0">
+                  <CalendarDays className="w-5 h-5 text-amber-500" />
+                </div>
+                <div>
+                  <p className="text-lg font-black text-foreground">{pendingLeaves}</p>
+                  <p className="text-[11px] text-muted-foreground font-medium">Pending Leaves</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-border/40">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 shrink-0">
+                  <Award className="w-5 h-5 text-emerald-500" />
+                </div>
+                <div>
+                  <p className="text-lg font-black text-foreground">{approvedLeaves}</p>
+                  <p className="text-[11px] text-muted-foreground font-medium">Approved Leaves</p>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Main layout */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Left content — 2/3 */}
+        {/* Left content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Clock In / Out */}
           <Card className="border border-border/60">
@@ -279,16 +303,18 @@ export default function EmployeeDashboardPage() {
                   className="rounded-xl h-12 px-6 font-bold bg-indigo-500 hover:bg-indigo-600 hover:-translate-y-0.5 active:scale-[0.98] transition-all disabled:opacity-50 gap-2"
                   disabled={isClockedIn || clockLoading || dataLoading}
                   onClick={handleClockIn}
+                  aria-label="Clock in"
                 >
-                  {clockLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><LogIn className="w-4 h-4" />CLOCK IN</>}
+                  {clockLoading && !isClockedIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <><LogIn className="w-4 h-4" />CLOCK IN</>}
                 </Button>
                 <Button
                   variant="outline"
                   className="rounded-xl h-12 px-6 font-bold hover:-translate-y-0.5 active:scale-[0.98] transition-all disabled:opacity-40 gap-2"
                   disabled={!isClockedIn || isClockedOut || clockLoading || dataLoading}
                   onClick={handleClockOut}
+                  aria-label="Clock out"
                 >
-                  {clockLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><LogOut className="w-4 h-4" />CLOCK OUT</>}
+                  {clockLoading && isClockedIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <><LogOut className="w-4 h-4" />CLOCK OUT</>}
                 </Button>
               </div>
             </CardContent>
@@ -305,41 +331,54 @@ export default function EmployeeDashboardPage() {
             </CardHeader>
             <CardContent className="p-0">
               {dataLoading ? (
-                <div className="flex items-center justify-center py-12 gap-3 text-muted-foreground">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span className="text-sm">Loading...</span>
+                <div className="p-4 space-y-3">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex gap-4">
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-16" />
+                      <Skeleton className="h-4 w-16" />
+                      <Skeleton className="h-4 w-12" />
+                      <Skeleton className="h-4 w-16 ml-auto" />
+                    </div>
+                  ))}
                 </div>
               ) : attendanceHistory.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground text-sm">No attendance records yet.</div>
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Clock className="w-8 h-8 text-muted-foreground/30 mb-3" />
+                  <p className="text-sm font-medium text-foreground mb-1">No attendance records yet</p>
+                  <p className="text-xs text-muted-foreground">Clock in to start tracking your attendance.</p>
+                </div>
               ) : (
                 <div className="overflow-auto">
                   <Table>
                     <TableHeader className="bg-muted/30">
                       <TableRow className="border-border/40">
-                        <TableHead className="font-bold text-foreground">Date</TableHead>
-                        <TableHead className="font-bold text-foreground text-center">Check In</TableHead>
-                        <TableHead className="font-bold text-foreground text-center">Check Out</TableHead>
-                        <TableHead className="font-bold text-foreground text-center">Hours</TableHead>
-                        <TableHead className="font-bold text-foreground text-right pr-6">Status</TableHead>
+                        <TableHead className="font-semibold text-foreground">Date</TableHead>
+                        <TableHead className="font-semibold text-foreground text-center">Check In</TableHead>
+                        <TableHead className="font-semibold text-foreground text-center">Check Out</TableHead>
+                        <TableHead className="font-semibold text-foreground text-center">Hours</TableHead>
+                        <TableHead className="font-semibold text-foreground text-right pr-6">Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {attendanceHistory.slice(0, 10).map((rec) => (
                         <TableRow key={rec.id} className="hover:bg-muted/20 transition-colors border-border/40">
-                          <TableCell className="font-medium">{rec.date}</TableCell>
+                          <TableCell className="font-medium text-sm">
+                            {new Date(rec.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                          </TableCell>
                           <TableCell className="text-center font-mono text-sm">
                             {rec.check_in ? new Date(rec.check_in).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
                           </TableCell>
                           <TableCell className="text-center font-mono text-sm">
                             {rec.check_out ? new Date(rec.check_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
                           </TableCell>
-                          <TableCell className="text-center font-bold text-sm">
+                          <TableCell className="text-center font-semibold text-sm">
                             {rec.total_hours ? `${rec.total_hours}h` : "—"}
                           </TableCell>
                           <TableCell className="text-right pr-6">
                             <Badge
                               className={cn(
-                                "rounded-lg border-none px-3 py-0.5 font-bold text-xs",
+                                "rounded-lg border-none px-3 py-0.5 font-semibold text-xs",
                                 rec.status === "Present" ? "bg-emerald-500/10 text-emerald-600"
                                   : rec.status === "Late" ? "bg-amber-500/10 text-amber-600"
                                   : "bg-rose-500/10 text-rose-600"
@@ -358,7 +397,7 @@ export default function EmployeeDashboardPage() {
           </Card>
         </div>
 
-        {/* Right sidebar — 1/3 */}
+        {/* Right sidebar */}
         <div className="space-y-6">
           {/* Apply Leave */}
           <Card className="border border-border/60">
@@ -368,21 +407,10 @@ export default function EmployeeDashboardPage() {
             </CardHeader>
             <CardContent>
               <form onSubmit={handleApplyLeave} className="space-y-4">
-                {leaveError && (
-                  <div className="text-xs font-semibold text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-xl px-3 py-2">
-                    {leaveError}
-                  </div>
-                )}
-                {leaveSuccess && (
-                  <div className="text-xs font-semibold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2">
-                    Leave request submitted successfully!
-                  </div>
-                )}
-
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold">Leave Type</Label>
+                  <Label htmlFor="leave-type" className="text-xs font-bold">Leave Type</Label>
                   <Select value={leaveForm.leaveType} onValueChange={(v) => v && setLeaveForm((p) => ({ ...p, leaveType: v as LeaveType }))}>
-                    <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                    <SelectTrigger id="leave-type"><SelectValue placeholder="Select type" /></SelectTrigger>
                     <SelectContent>
                       {(["Annual", "Sick", "Casual", "Maternity", "Paternity", "Unpaid"] as const).map((type) => {
                         const remaining = type !== "Unpaid" && balance
@@ -405,18 +433,19 @@ export default function EmployeeDashboardPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold">Start Date</Label>
-                    <Input type="date" value={leaveForm.startDate} onChange={(e) => setLeaveForm((p) => ({ ...p, startDate: e.target.value }))} />
+                    <Label htmlFor="start-date" className="text-xs font-bold">Start Date</Label>
+                    <Input id="start-date" type="date" value={leaveForm.startDate} onChange={(e) => setLeaveForm((p) => ({ ...p, startDate: e.target.value }))} />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold">End Date</Label>
-                    <Input type="date" value={leaveForm.endDate} onChange={(e) => setLeaveForm((p) => ({ ...p, endDate: e.target.value }))} />
+                    <Label htmlFor="end-date" className="text-xs font-bold">End Date</Label>
+                    <Input id="end-date" type="date" value={leaveForm.endDate} onChange={(e) => setLeaveForm((p) => ({ ...p, endDate: e.target.value }))} />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold">Reason (optional)</Label>
+                  <Label htmlFor="leave-reason" className="text-xs font-bold">Reason (optional)</Label>
                   <Textarea
+                    id="leave-reason"
                     placeholder="Brief reason..."
                     className="resize-none h-20"
                     value={leaveForm.reason}
@@ -442,12 +471,22 @@ export default function EmployeeDashboardPage() {
             </CardHeader>
             <CardContent>
               {dataLoading ? (
-                <div className="flex items-center justify-center py-6 gap-2 text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span className="text-xs">Loading...</span>
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                      <div className="space-y-1.5">
+                        <Skeleton className="h-3 w-20" />
+                        <Skeleton className="h-3 w-28" />
+                      </div>
+                      <Skeleton className="h-5 w-16 rounded-md" />
+                    </div>
+                  ))}
                 </div>
               ) : leaves.length === 0 ? (
-                <p className="text-center py-6 text-muted-foreground text-xs">No leave requests yet.</p>
+                <div className="text-center py-6">
+                  <CalendarDays className="w-6 h-6 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">No leave requests yet.</p>
+                </div>
               ) : (
                 <div className="space-y-2.5">
                   {leaves.slice(0, 5).map((leave) => {
@@ -464,7 +503,7 @@ export default function EmployeeDashboardPage() {
                         </div>
                         <Badge
                           className={cn(
-                            "rounded-md border-none px-2 py-0.5 font-bold text-[10px]",
+                            "rounded-md border-none px-2 py-0.5 font-semibold text-[10px]",
                             leave.status === "approved" ? "bg-emerald-500/10 text-emerald-600"
                               : leave.status === "rejected" ? "bg-rose-500/10 text-rose-600"
                               : "bg-amber-500/10 text-amber-600"

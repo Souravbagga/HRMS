@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -9,9 +10,12 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "HRMS - Premium Human Resource Management System",
+  title: "HRMS.pro — Human Resource Management",
   description:
-    "A modern, production-quality dashboard for workforce management.",
+    "A modern, production-quality HR platform for workforce management.",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
@@ -29,6 +33,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {children}
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>
